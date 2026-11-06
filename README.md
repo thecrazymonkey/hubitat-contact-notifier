@@ -19,8 +19,8 @@ Known limitation: two profiles announcing on the same speaker within the restore
 
 ## Tests (off-hub)
 - `tests/run_all.sh` - fast logic tests. Run them with Groovy 2.4, the version Hubitat uses ([developer overview](https://docs2.hubitat.com/developer/overview)); verified on 2.4.21. They use stubs, so they do not prove the app works on a hub.
-- `gradle test` - Hubitat CI (`hubitat_ci` 0.17): validates both apps against Hubitat's Groovy sandbox rules and checks that `initialize()` calls the Hubitat scheduling/label APIs correctly. Needs **Java 17** (verified passing under Temurin 17; Java 25 will not work with this 2021 library); the JVM flags in `build.gradle` open JDK internals it needs.
-- Known gap: `hubitat_ci` 0.17 does not know the `button` input type, so the spec validates the profile with that one input swapped for a `bool`.
+- `gradle test` - Hubitat CI (`hubitat_ci` 0.17): validates both apps against Hubitat's Groovy sandbox rules and checks that `initialize()` calls the Hubitat scheduling/label APIs correctly. Needs **Java 17** (verified passing under Temurin 17; Java 25 will not work with this library. 0.17 is the newest version on its Maven feed, published in 2019, while the GitHub source has since moved on); the JVM flags in `build.gradle` open JDK internals it needs.
+- Known gap: `hubitat_ci` 0.17 does not know the `button` input type (newer source versions may, but they are not published to the Maven feed), so the spec validates the profile with that one input swapped for a `bool`.
 
 ## Verify on your hub
 - [ ] Open a door and unlock a lock, press **Run now**: ONE message naming both with states.
