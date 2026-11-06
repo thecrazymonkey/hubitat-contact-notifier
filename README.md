@@ -5,8 +5,6 @@ Checks contact sensors and locks at a fixed time on chosen weekdays and sends ON
 ## Install
 **Bundle (easiest):** run `gradle bundle` (output: `build/distributions/ContactNotifier.zip`), then Hubitat → **Developer tools → Bundle Manager → Import ZIP** (it adds the parent and profile apps; the manifest lists the parent first). Needs a local Gradle 9 + Java 17 (no wrapper). Then **Apps → Add User App → Contact Notifier**, then **Add profile**. The bundle's file layout (`install.txt`/`update.txt` + `namespace.Name.groovy`) was copied from a published community bundle, since Hubitat's docs don't describe it, so confirm the first import on your hub.
 
-**Upgrading from the `ivan` namespace:** if you ever installed these apps under namespace `ivan`, delete the old apps (and their profiles) first. The hub treats `ivank` as different code, so existing profiles stay bound to the old one.
-
 **Manual:**
 1. Hubitat → **Apps Code → New App** → paste `apps/ContactNotifierParent.groovy` → Save.
 2. **Apps Code → New App** → paste `apps/ContactNotifierProfile.groovy` → Save.
