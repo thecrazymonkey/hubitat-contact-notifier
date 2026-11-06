@@ -12,31 +12,36 @@ Rule Machine can check doors and locks on a schedule, but it needs one IF per de
 
 ## Non-goals
 - Sunrise/sunset schedules, repeating intervals, event-driven (instant) alerts.
-- "All clear" messages (silent when nothing matches — explicit user decision).
+- "All clear" messages (silent when nothing matches, by design).
 - Acting on devices (locking/closing). Check and notify only.
+- Global defaults in the parent app (the parent only manages profiles).
 
 ## Anti-goals
-- Many notifications per run (user explicitly wants few).
+- Many notifications per run.
 - A broken/offline device being read as "secure".
 
-## Structure (builder's call; Hubitat idiom)
-- **Parent app** `Contact Notifier`: lists/creates/deletes profiles; optional global defaults.
+## Structure
+- **Parent app** `Contact Notifier`: lists/creates/deletes profiles.
 - **Child app** `Contact Notifier Profile`: one per profile, holds all settings below.
-- Groovy, single repo, installable via manual code import (Hubitat Package Manager manifest optional).
+- Groovy, namespace `ivank`. Installed through a Hubitat Bundle (`gradle bundle` builds the ZIP) or by pasting the two files into Apps Code.
 
 ## Profile settings
 | Setting | Detail |
 |---|---|
-| Name | Free text |
+| Name | Free text; also used as the app label |
 | Contact sensors | `capability.contactSensor`, multiple |
 | Locks | `capability.lock`, multiple |
-| Contact expected state | Alert when contacts are: `open` or `closed` |
-| Lock expected state | Alert when locks are: `locked` or `unlocked` |
-| Schedule | One fixed time of day + days-of-week checkboxes |
-| Message template | Placeholders below |
+| Contact alert state | Alert when contacts are: `open` or `closed` |
+| Lock alert state | Alert when locks are: `locked` or `unlocked` |
+| Schedule | One fixed time of day + days-of-week |
+| Message template | Placeholders below; default `Not secure: {devices}` |
 | Notification devices | `capability.notification`, multiple |
-| Speakers | `capability.speechSynthesis` (speak) and `capability.musicPlayer` (playText), multiple |
-| Speaker volume | Optional; set before announcing, restore previous level after |
+| Speakers | `capability.speechSynthesis` (`speak`) and `capability.musicPlayer` (`playText`), multiple. A speaker in both lists is announced by both methods, so the two can be compared |
+| Speaker volume | Optional; set before announcing, previous level restored after |
+| Restore delay | Seconds before the previous volume is restored (default 15) |
+| Stale check | Optional "no activity for N hours" (1–8760), off by default |
+| Info logging | On by default |
+| Run now | Button; runs the same code path as the schedule |
 
 A profile may mix contacts and locks. "Alert when" means: a device whose current state equals the chosen value is reported.
 
@@ -45,23 +50,25 @@ Default: one combined sentence. Placeholders:
 - `{devices}` — all offenders, each with its own state, e.g. `Front door (open), Garage lock (unlocked)`
 - `{contacts}` — offending contacts only; `{locks}` — offending locks only (enables "Unlocked: {locks}. Open: {contacts}.")
 - `{count}`, `{time}`
-Offenders with no clean state are included as e.g. `Back lock (unknown)`.
+
+Offenders with no clean state are included as e.g. `Back lock (unknown)`. Unknown placeholders are left as written.
 
 ## Run behaviour
 1. At the scheduled time on a ticked day, read each selected device's current state.
-2. Offender = state equals the alert value, OR state is not one of the two valid values for its type (e.g. `unknown`, null) — see assumption below. A lock reporting `unlocked with timeout` is treated as `unlocked` (user decision, 2026-11-05).
-3. No offenders → do nothing (log only).
-4. Otherwise build ONE message, send to every selected notification device, TTS device and music player.
+2. A device is reported when its state equals the alert value, or when it has no clean state: a value other than the two valid ones for its type (e.g. `unknown`, `jammed`, null) is reported with that state, or as `unknown` when null. A lock reporting `unlocked with timeout` is treated as `unlocked`.
+3. No offenders → nothing is sent (logged only).
+4. Otherwise build ONE message and send it to every selected notification device, TTS device and music player. If offenders exist but no target is selected, a warning is logged instead.
 
-## Assumptions / calls I made (please check)
-1. **Stale sensors:** user asked that dead-battery sensors not look secure. A sensor still showing a stale value is not detectable from state alone. My call: v1 treats null/unknown/unrecognised values as offenders and adds an optional per-profile "stale after N hours (no activity)" check, off by default, using `lastActivity`; when the check is on, a device with no `lastActivity` at all is also reported as stale. Contact sensors that are legitimately idle for days make this noisy, hence off by default.
-2. Volume attribute differs by driver (`level` on musicPlayer, `volume` on AudioVolume); builder must handle both and skip restore if neither exists.
-3. A "Run now" button on each profile for testing is included (low cost, high value).
-4. Info logging toggle per profile (on by default).
-5. Volume restore is per profile. Two profiles announcing on the same speaker within the restore delay can leave it at the announcement volume (each profile only knows its own saved level). Known limitation.
-6. Each saved volume carries a timestamp. If the restore timer is lost (e.g. hub reboot during the delay), an entry older than the restore delay + 60 s is ignored and the speaker's current volume is saved instead, so a stale value is never restored.
+## Design decisions and known limitations
+1. **Stale sensors:** a sensor that keeps showing an old value (e.g. dead battery) cannot be detected from its state alone. Null, unknown and unrecognised values are always reported. The optional stale check additionally reports a device as `stale` when its `lastActivity` is older than N hours or missing. It is off by default because contact sensors that are legitimately idle for days make it noisy.
+2. **Volume attribute** differs by driver (`level` on musicPlayer, `volume` on AudioVolume). Both are handled, and the volume step is skipped for a speaker with neither.
+3. **Volume restore** relies on a timer, because Hubitat gives no reliable "speech finished" signal. Saved volumes carry a timestamp. The first saved value wins when announcements overlap. An entry older than the restore delay + 60 s is treated as expired (e.g. the hub restarted before the restore ran), and the speaker's current volume is saved instead, so a stale value is never restored.
+4. **Per-profile volume state:** two profiles announcing on the same speaker within the restore delay can leave it at the announcement volume, because each profile only knows its own saved level.
+5. **Scheduling:** only the check job is unscheduled when a profile is saved, so a pending volume restore is not cancelled.
+6. **Logging:** the info toggle covers the run summary. Warnings (nothing scheduled, no devices, no targets, failed device calls) are always logged.
 
-## Acceptance criteria (definition of done)
+## Acceptance criteria
+Verified off-hub by the test suites; the hub-only items are tracked in the README checklist.
 - [ ] Can create, edit and delete several profiles from the parent app.
 - [ ] Device pickers list contact sensors and locks; a profile can contain both.
 - [ ] Profile fires at its fixed time only on ticked days.
@@ -71,5 +78,5 @@ Offenders with no clean state are included as e.g. `Back lock (unknown)`.
 - [ ] Message placeholders `{devices} {contacts} {locks} {count} {time}` all substitute correctly.
 - [ ] Notification, TTS and music-player targets each receive the message when selected.
 - [ ] Speaker volume is set for the announcement and restored afterwards.
-- [ ] "Run now" button triggers a check using the same code path as the schedule.
+- [ ] "Run now" triggers a check using the same code path as the schedule.
 - [ ] Profiles run independently with different schedules, states, messages and targets.
