@@ -119,3 +119,46 @@ String render(String template, List<Map> offenders, String timeText) {
     ]
     return t.replaceAll(/\{(devices|contacts|locks|count|time)\}/) { all, key -> values[key] }
 }
+
+// ------------------------------------------------------------------ delivery
+
+void deliver(String message) {
+    List tts = (settings.ttsDevices ?: []) as List
+    List music = (settings.musicDevices ?: []) as List
+    Integer volume = settings.speakerVolume as Integer
+    state.savedVolumes = [:]
+
+    if (volume != null) {
+        (tts + music).unique { it.id }.each { d -> safely("set volume on ${d}") { saveAndSetVolume(d, volume) } }
+    }
+    (settings.notifiers ?: []).each { d -> safely("notify ${d}") { d.deviceNotification(message) } }
+    tts.each { d -> safely("speak on ${d}") { d.speak(message) } }
+    music.each { d -> safely("playText on ${d}") { d.playText(message) } }
+
+    if (state.savedVolumes) runIn((settings.restoreDelaySec ?: 15) as Integer, "restoreVolumes")
+}
+
+void restoreVolumes() {
+    List all = (((settings.ttsDevices ?: []) as List) + ((settings.musicDevices ?: []) as List))
+    (state.savedVolumes ?: [:]).each { String id, Map saved ->
+        def d = all.find { it.id.toString() == id }
+        if (d) safely("restore volume on ${d}") { setVolumeAttr(d, saved.attr as String, saved.value) }
+    }
+    state.savedVolumes = [:]
+}
+
+private void saveAndSetVolume(def d, Integer volume) {
+    String attr = ["level", "volume"].find { d.hasAttribute(it) }
+    if (!attr) return
+    state.savedVolumes[d.id.toString()] = [attr: attr, value: d.currentValue(attr)]
+    setVolumeAttr(d, attr, volume)
+}
+
+private void setVolumeAttr(def d, String attr, def value) {
+    if (value == null) return
+    if (attr == "level") d.setLevel(value) else d.setVolume(value)
+}
+
+private void safely(String what, Closure c) {
+    try { c() } catch (Exception e) { log.warn "Contact Notifier: failed to ${what}: ${e.message}" }
+}
