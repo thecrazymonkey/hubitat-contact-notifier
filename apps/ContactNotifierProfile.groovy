@@ -1,9 +1,9 @@
 definition(
     name: "Contact Notifier Profile",
-    namespace: "ivan",
+    namespace: "ivank",
     author: "ivan",
     description: "One profile: devices, schedule, message and delivery targets.",
-    parent: "ivan:Contact Notifier",
+    parent: "ivank:Contact Notifier",
     category: "Convenience",
     iconUrl: "",
     iconX2Url: "",
@@ -47,7 +47,7 @@ def mainPage() {
                   defaultValue: 15, required: false
         }
         section("Advanced") {
-            input "staleHours", "number", title: "Report devices with no activity for N hours (blank = off)", required: false
+            input "staleHours", "number", title: "Report devices with no activity for N hours (blank = off)", range: "1..8760", required: false
             input "logEnable", "bool", title: "Enable info logging", defaultValue: true
             input "runNow", "button", title: "Run now"
         }
@@ -59,8 +59,11 @@ def updated() { initialize() }
 
 def initialize() {
     unschedule("runCheck")   // not bare unschedule(): that would also cancel a pending restoreVolumes
-    String cron = cronFor(settings.runTime as String, settings.runDays as List)
+    def days = settings.runDays
+    String cron = cronFor(settings.runTime as String, days instanceof String ? [days] : days as List)   // a lone String would split into characters
     if (cron) schedule(cron, "runCheck")
+    else log.warn "Contact Notifier: not scheduled - set a time and at least one day"
+    if (!(settings.contacts || settings.locks)) log.warn "Contact Notifier: no contact sensors or locks selected"
     if (settings.profileName) app.updateLabel(settings.profileName as String)
 }
 
@@ -131,15 +134,18 @@ void deliver(String message) {
     List music = (settings.musicDevices ?: []) as List
     Integer volume = settings.speakerVolume as Integer
     if (state.savedVolumes == null) state.savedVolumes = [:]   // keep entries from a run whose restore is pending
+    Integer delay = settings.restoreDelaySec != null ? settings.restoreDelaySec as Integer : 15
+    Long nowMs = now()
 
     if (volume != null) {
-        (tts + music).unique { it.id }.each { d -> safely("set volume on ${d}") { saveAndSetVolume(d, volume) } }
+        // a saved entry older than the restore delay + 60 s means the restore job was lost: do not trust it
+        Long ttlMs = (delay + 60) * 1000L
+        (tts + music).unique { it.id }.each { d -> safely("set volume on ${d}") { saveAndSetVolume(d, volume, nowMs, ttlMs) } }
     }
     (settings.notifiers ?: []).each { d -> safely("notify ${d}") { d.deviceNotification(message) } }
     tts.each { d -> safely("speak on ${d}") { d.speak(message) } }
     music.each { d -> safely("playText on ${d}") { d.playText(message) } }
 
-    Integer delay = settings.restoreDelaySec != null ? settings.restoreDelaySec as Integer : 15
     if (state.savedVolumes) runIn(delay, "restoreVolumes")
 }
 
@@ -152,12 +158,18 @@ void restoreVolumes() {
     state.savedVolumes = [:]
 }
 
-private void saveAndSetVolume(def d, Integer volume) {
+private void saveAndSetVolume(def d, Integer volume, Long nowMs, Long ttlMs) {
     String attr = ["level", "volume"].find { d.hasAttribute(it) }
     if (!attr) return
     String id = d.id.toString()
-    // first saved value wins: a repeat run must not record the announcement volume as the "previous" one
-    if (!state.savedVolumes.containsKey(id)) state.savedVolumes[id] = [attr: attr, value: d.currentValue(attr)]
+    // first saved value wins: a repeat run must not record the announcement volume as the "previous" one.
+    // ...unless that entry is too old to still be pending (restore job lost), then save the current volume.
+    // Assign a whole map back to state rather than mutating it in place, so the hub is sure to persist it.
+    Map saved = new LinkedHashMap(state.savedVolumes ?: [:])
+    Map old = saved[id] as Map
+    boolean fresh = old != null && old.savedAt != null && (nowMs - (old.savedAt as Long)) <= ttlMs
+    if (!fresh) saved[id] = [attr: attr, value: d.currentValue(attr), savedAt: nowMs]
+    state.savedVolumes = saved
     setVolumeAttr(d, attr, volume)
 }
 
@@ -180,6 +192,10 @@ void runCheck() {
                                    settings.staleHours as Integer, nowMs)
     if (!offenders) {
         logInfo "All devices OK, nothing to send"
+        return
+    }
+    if (!(settings.notifiers || settings.ttsDevices || settings.musicDevices)) {
+        log.warn "Contact Notifier: ${offenders.size()} device(s) not secure but no notification, TTS or music targets are selected"
         return
     }
     String timeText = new Date(nowMs).format("h:mm a", location.timeZone)

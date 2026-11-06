@@ -27,6 +27,19 @@ def names = h.named('input')*.getAt(1)*.find { it instanceof String }
 ['profileName','contacts','locks','contactAlert','lockAlert','runTime','runDays','messageTemplate','notifiers',
  'ttsDevices','musicDevices','speakerVolume','restoreDelaySec','staleHours','logEnable','runNow'].each { assert it in names, it }
 
+// a lone String day (not a List) still schedules
+h = Harness.load('apps/ContactNotifierProfile.groovy', [settings: [runTime: '2026-01-01T22:05:00.000-0500', runDays: 'MON']])
+h.call('initialize')
+assert h.named('schedule')[0][1] == ['0 5 22 ? * MON', 'runCheck']
+
+// missing schedule/devices are warned about, not silent
+h = Harness.load('apps/ContactNotifierProfile.groovy', [settings: [:]])
+h.call('initialize')
+def warns = h.script.binding.getVariable('log').lines.findAll { it[0] == 'warn' }*.getAt(1)
+assert warns.any { it.contains('not scheduled') } && warns.any { it.contains('no contact sensors or locks') }
+
 // Run-now button triggers a check (no devices -> silent, no exception)
+h = Harness.load('apps/ContactNotifierProfile.groovy')
 h.call('appButtonHandler', 'runNow')
+assert h.script.binding.getVariable('log').lines.any { it[1].contains('All devices OK') }
 println 'ScheduleSpec ok'

@@ -11,7 +11,7 @@ sourceSets {
 
 repositories {
     mavenCentral()
-    maven { url 'https://biocomp.pkgs.visualstudio.com/HubitatCiRelease/_packaging/hubitat_ci_feed@Release/maven/v1' }
+    maven { url = 'https://biocomp.pkgs.visualstudio.com/HubitatCiRelease/_packaging/hubitat_ci_feed@Release/maven/v1' }
 }
 
 dependencies {
@@ -21,11 +21,41 @@ dependencies {
     testImplementation 'junit:junit:4.13.2'
 }
 
+// Hubitat installation bundle: `gradle bundle` -> build/distributions/ContactNotifier.zip
+// Import via Developer tools > Bundle Manager > Import ZIP. Installs the parent first, then the child.
+def bundleNamespace = 'ivank'
+def bundleName = 'ContactNotifier'
+def bundleApps = ['ContactNotifierParent', 'ContactNotifierProfile']   // install order
+def bundleDir = layout.buildDirectory.dir('bundle')
+
+tasks.register('bundleManifest') {
+    def manifest = ([bundleNamespace, bundleName] + bundleApps.collect { "app ${bundleNamespace}.${it}.groovy" }).join('\n')   // no trailing newline, like published bundles
+    def out = bundleDir
+    inputs.property('manifest', manifest)
+    outputs.dir(out)
+    doLast {
+        def dir = out.get().asFile
+        dir.mkdirs()
+        new File(dir, 'install.txt').text = manifest
+        new File(dir, 'update.txt').text = manifest
+    }
+}
+
+tasks.register('bundle', Zip) {
+    group = 'distribution'
+    description = 'Creates the Hubitat Bundle Manager ZIP with both apps'
+    archiveFileName = "${bundleName}.zip"
+    destinationDirectory = layout.buildDirectory.dir('distributions')
+    from(tasks.named('bundleManifest'))
+    bundleApps.each { n -> from("apps/${n}.groovy") { rename { "${bundleNamespace}.${n}.groovy" } } }
+}
+
 test {
     useJUnit()
+    inputs.dir('apps')   // the specs read the apps at runtime; without this, edits leave :test UP-TO-DATE
     // hubitat_ci (2021) reaches into JDK internals that Java 17 hides by default
     jvmArgs '--add-exports=java.base/sun.util.calendar=ALL-UNNAMED', '--add-opens=java.base/java.lang=ALL-UNNAMED',
             '--add-opens=java.base/java.util=ALL-UNNAMED', '--add-opens=java.base/java.text=ALL-UNNAMED',
             '--add-exports=java.xml/com.sun.org.apache.xerces.internal.dom=ALL-UNNAMED', '--add-exports=java.xml/com.sun.org.apache.xerces.internal.jaxp=ALL-UNNAMED'
-    testLogging { events 'passed', 'failed'; exceptionFormat 'full' }
+    testLogging { events 'passed', 'failed'; exceptionFormat = 'full' }
 }

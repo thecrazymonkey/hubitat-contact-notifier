@@ -1,10 +1,10 @@
 /**
  * Contact Notifier (parent) - manages notification profiles.
- * Install together with "Contact Notifier Profile" (child app), namespace ivan.
+ * Install together with "Contact Notifier Profile" (child app), namespace ivank.
  */
 definition(
     name: "Contact Notifier",
-    namespace: "ivan",
+    namespace: "ivank",
     author: "ivan",
     description: "Scheduled check of doors and locks with a single combined notification per profile.",
     category: "Convenience",
@@ -21,7 +21,7 @@ preferences {
 def mainPage() {
     dynamicPage(name: "mainPage", title: "Contact Notifier", install: true, uninstall: true) {
         section {
-            app(name: "profiles", appName: "Contact Notifier Profile", namespace: "ivan",
+            app(name: "profiles", appName: "Contact Notifier Profile", namespace: "ivank",
                 title: "Add profile", multiple: true)
         }
     }

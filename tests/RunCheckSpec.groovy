@@ -23,7 +23,14 @@ assert n.calls[0][1] == ['Back lock (unknown)']
 // no devices / no settings -> silent no-op
 h = load([:])
 h.call('runCheck')
-assert h.named('runIn').isEmpty()
+def lines = h.script.binding.getVariable('log').lines
+assert lines.any { it[1].contains('All devices OK') } && !lines.any { it[1].contains('Sending') }
+
+// offenders but no delivery targets -> warning, nothing sent
+h = load([contacts: [door]])
+h.call('runCheck')
+lines = h.script.binding.getVariable('log').lines
+assert lines.any { it[0] == 'warn' && it[1].contains('no notification') } && !lines.any { it[1].contains('Sending') }
 
 // {time} uses the hub time zone formatting
 n = dev('n', [:])

@@ -14,6 +14,7 @@ class Harness {
             if (last instanceof Closure) { last.delegate = h.script; return last.call() }
             null
         }
+        b.getVariable('app').onPageCall = { Map m -> h.calls << ['app', [m]] }
         h.script.run()
         h
     }

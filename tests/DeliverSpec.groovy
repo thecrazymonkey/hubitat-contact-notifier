@@ -35,6 +35,46 @@ h = load([ttsDevices: [t], speakerVolume: 40])
 h.call('deliver', 'one'); h.call('deliver', 'two'); h.call('restoreVolumes')
 assert t.attrs.level == 20
 
+// one speaker in both lists with a volume: announced by speak AND playText, volume saved once, original restored
+def both = dev('b', [level: 20])
+h = load([ttsDevices: [both], musicDevices: [both], speakerVolume: 40])
+h.call('deliver', 'Hi')
+assert both.calls*.getAt(0) == ['setLevel', 'speak', 'playText']
+assert h.script.binding.getVariable('state').savedVolumes.size() == 1
+h.call('restoreVolumes')
+assert both.attrs.level == 20
+
+// lost restore job: an entry older than restoreDelaySec + 60s is expired, so the current volume is saved instead
+t = dev('t', [level: 20])
+h = load([ttsDevices: [t], speakerVolume: 40])          // default delay 15s -> entries expire after 75s
+h.hooks.now = { 0L }
+h.call('deliver', 'one')                                  // saves 20, sets 40; restore job "lost"
+t.attrs.level = 60                                        // user changes the volume afterwards
+h.hooks.now = { 76_000L }
+h.call('deliver', 'two')
+h.call('restoreVolumes')
+assert t.attrs.level == 60
+
+// ...but inside the window the first value still wins
+t = dev('t', [level: 20])
+h = load([ttsDevices: [t], speakerVolume: 40])
+h.hooks.now = { 0L }
+h.call('deliver', 'one')
+h.hooks.now = { 74_000L }
+h.call('deliver', 'two')
+h.call('restoreVolumes')
+assert t.attrs.level == 20
+
+// the window grows with a long restore delay (120s delay: a run at 150s is still inside 180s)
+t = dev('t', [level: 20])
+h = load([ttsDevices: [t], speakerVolume: 40, restoreDelaySec: 120])
+h.hooks.now = { 0L }
+h.call('deliver', 'one')
+h.hooks.now = { 150_000L }
+h.call('deliver', 'two')
+h.call('restoreVolumes')
+assert t.attrs.level == 20
+
 // restoreDelaySec 0 is respected, not replaced by the default
 t = dev('t', [level: 20])
 h = load([ttsDevices: [t], speakerVolume: 40, restoreDelaySec: 0])
