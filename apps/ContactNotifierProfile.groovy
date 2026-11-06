@@ -6,7 +6,8 @@ definition(
     parent: "ivan:Contact Notifier",
     category: "Convenience",
     iconUrl: "",
-    iconX2Url: ""
+    iconX2Url: "",
+    iconX3Url: ""
 )
 
 preferences {
@@ -17,7 +18,7 @@ preferences {
                                                  FRI: "Friday", SAT: "Saturday", SUN: "Sunday"]
 
 def mainPage() {
-    dynamicPage(name: "mainPage", title: "", install: true, uninstall: true) {
+    dynamicPage(name: "mainPage", title: "Contact Notifier Profile", install: true, uninstall: true) {
         section("Profile") {
             input "profileName", "text", title: "Profile name", required: true
         }

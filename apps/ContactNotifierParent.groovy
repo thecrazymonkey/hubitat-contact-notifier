@@ -10,6 +10,7 @@ definition(
     category: "Convenience",
     iconUrl: "",
     iconX2Url: "",
+    iconX3Url: "",
     singleInstance: true
 )
 
@@ -18,7 +19,7 @@ preferences {
 }
 
 def mainPage() {
-    dynamicPage(name: "mainPage", title: "", install: true, uninstall: true) {
+    dynamicPage(name: "mainPage", title: "Contact Notifier", install: true, uninstall: true) {
         section {
             app(name: "profiles", appName: "Contact Notifier Profile", namespace: "ivan",
                 title: "Add profile", multiple: true)
