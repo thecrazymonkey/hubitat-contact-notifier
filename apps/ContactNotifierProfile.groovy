@@ -38,3 +38,18 @@ private Map classify(def d, String kind, List valid, String alertState, Integer 
     }
     return null
 }
+
+// ----------------------------------------------------------------- rendering
+
+String render(String template, List<Map> offenders, String timeText) {
+    String t = template?.trim() ? template : "Not secure: {devices}"
+    Closure fmt = { List l -> l ? l.collect { "${it.name} (${it.state})" }.join(", ") : "none" }
+    Map values = [
+        devices : fmt(offenders),
+        contacts: fmt(offenders.findAll { it.kind == "contact" }),
+        locks   : fmt(offenders.findAll { it.kind == "lock" }),
+        count   : offenders.size().toString(),
+        time    : timeText ?: ""
+    ]
+    return t.replaceAll(/\{(devices|contacts|locks|count|time)\}/) { all, key -> values[key] }
+}
