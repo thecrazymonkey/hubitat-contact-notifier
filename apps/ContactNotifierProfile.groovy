@@ -162,3 +162,25 @@ private void setVolumeAttr(def d, String attr, def value) {
 private void safely(String what, Closure c) {
     try { c() } catch (Exception e) { log.warn "Contact Notifier: failed to ${what}: ${e.message}" }
 }
+
+// ------------------------------------------------------------------- the check
+
+/** Scheduled entry point (also used by the "Run now" button). Sends at most one message. */
+void runCheck() {
+    Long nowMs = now()
+    List<Map> offenders = evaluate(settings.contacts as List, settings.locks as List,
+                                   settings.contactAlert ?: "open", settings.lockAlert ?: "unlocked",
+                                   settings.staleHours as Integer, nowMs)
+    if (!offenders) {
+        logDebug "All devices OK, nothing to send"
+        return
+    }
+    String timeText = new Date(nowMs).format("h:mm a", location.timeZone)
+    String message = render(settings.messageTemplate as String, offenders, timeText)
+    logDebug "Sending: ${message}"
+    deliver(message)
+}
+
+private void logDebug(String msg) {
+    if (settings.logEnable) log.debug "Contact Notifier: ${msg}"
+}
