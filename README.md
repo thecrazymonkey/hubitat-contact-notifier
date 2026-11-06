@@ -9,7 +9,10 @@ Checks contact sensors and locks at a fixed time on chosen weekdays and sends ON
 
 ## Profile settings
 Devices and expected state, time + weekdays, message, then targets (notification devices, TTS devices, music players), optional volume (restored after N seconds), optional "no activity for N hours" check.
-Message placeholders: `{devices}` `{contacts}` `{locks}` `{count}` `{time}`. Devices not reporting a clean state appear as e.g. `Back lock (unknown)`.
+Message placeholders: `{devices}` `{contacts}` `{locks}` `{count}` `{time}`. Devices not reporting a clean state appear as e.g. `Back lock (unknown)`. `unlocked with timeout` counts as `unlocked`.
+
+A speaker picked as both TTS and music player is announced twice (`speak` and `playText`) on purpose, so you can compare them.
+Known limitation: two profiles announcing on the same speaker within the restore delay may leave it at the announcement volume.
 
 ## Tests (off-hub)
 - `tests/run_all.sh` - fast logic tests (needs Groovy 4). They use stubs, so they do not prove the app works on a hub.

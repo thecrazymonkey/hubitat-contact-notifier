@@ -11,6 +11,8 @@ h = Harness.load('apps/ContactNotifierProfile.groovy', [settings: [runTime: '202
 h.call('initialize')
 assert h.calls*.getAt(0) .findAll { it in ['unschedule', 'schedule'] } == ['unschedule', 'schedule']
 assert h.named('schedule')[0][1] == ['0 5 22 ? * MON', 'runCheck']
+// only the check is unscheduled, so a pending restoreVolumes job survives Done
+assert h.named('unschedule')[0][1] == ['runCheck']
 assert h.script.binding.getVariable('app').labels == ['Night']
 
 // no days -> unscheduled only, no crash

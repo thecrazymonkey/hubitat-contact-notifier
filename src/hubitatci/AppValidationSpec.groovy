@@ -35,7 +35,7 @@ class AppValidationSpec extends Specification {
         script.initialize()
 
         then:
-        1 * appApi.unschedule()
+        1 * appApi.unschedule("runCheck")
         1 * appApi.schedule("0 5 22 ? * MON,WED", "runCheck")
         1 * installedApp.updateLabel("Night")
     }

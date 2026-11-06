@@ -46,9 +46,11 @@ h = load([contacts: [door], notifiers: [n]])
 h.call('appButtonHandler', 'runNow')
 assert n.calls.size() == 1
 
-// debug logging only when enabled
-h = load([logEnable: true]); h.call('runCheck')
-assert h.script.binding.getVariable('log').lines.any { it[0] == 'debug' }
+// info logging: on by default (also when never saved), off when disabled
 h = load([:]); h.call('runCheck')
+assert h.script.binding.getVariable('log').lines.any { it[0] == 'info' }
+h = load([logEnable: true]); h.call('runCheck')
+assert h.script.binding.getVariable('log').lines.any { it[0] == 'info' }
+h = load([logEnable: false]); h.call('runCheck')
 assert h.script.binding.getVariable('log').lines.isEmpty()
 println 'RunCheckSpec ok'

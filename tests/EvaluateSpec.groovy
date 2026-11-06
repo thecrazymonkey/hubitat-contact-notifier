@@ -20,6 +20,14 @@ assert ev([c('Old', 'closed', new Date(now - 3 * 3600000L))], [], 'open', 'unloc
 assert ev([c('Old', 'closed', new Date(now - 3 * 3600000L))], [], 'open', 'unlocked', 0, now) == []
 assert ev([c('Old', 'closed', new Date(now - 3 * 3600000L))], [], 'open', 'unlocked', null, now) == []
 assert ev([c('Fresh', 'closed', new Date(now - 1 * 3600000L))], [], 'open', 'unlocked', 2, now) == []
+// stale check on: a device that never reported activity is not treated as secure
+assert ev([c('New', 'closed', null)], [], 'open', 'unlocked', 2, now) == [[name: 'New', kind: 'contact', state: 'stale']]
+// "unlocked with timeout" is a clean unlocked state
+assert ev([], [l('Front lock', 'unlocked with timeout')], 'open', 'locked') == []
+assert ev([], [l('Front lock', 'unlocked with timeout')]) == [[name: 'Front lock', kind: 'lock', state: 'unlocked']]
+// a failing getLastActivity() does not turn a clean state into unknown
+def flaky = c('Door', 'closed'); flaky.metaClass.getLastActivity = { -> throw new RuntimeException('x') }
+assert ev([flaky], []) == []
 // order: contacts then locks
 assert ev([c('A', 'open')], [l('B', 'unlocked')])*.kind == ['contact', 'lock']
 println 'EvaluateSpec ok'

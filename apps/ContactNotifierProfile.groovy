@@ -43,11 +43,12 @@ def mainPage() {
             input "ttsDevices", "capability.speechSynthesis", title: "TTS devices (speak)", multiple: true, required: false
             input "musicDevices", "capability.musicPlayer", title: "Music players (play text)", multiple: true, required: false
             input "speakerVolume", "number", title: "Announcement volume (0-100, optional)", range: "0..100", required: false
-            input "restoreDelaySec", "number", title: "Restore previous volume after (seconds)", defaultValue: 15, required: false
+            input "restoreDelaySec", "number", title: "Restore previous volume after (seconds)", range: "0..600",
+                  defaultValue: 15, required: false
         }
         section("Advanced") {
             input "staleHours", "number", title: "Report devices with no activity for N hours (blank = off)", required: false
-            input "logEnable", "bool", title: "Enable debug logging", defaultValue: false
+            input "logEnable", "bool", title: "Enable info logging", defaultValue: true
             input "runNow", "button", title: "Run now"
         }
     }
@@ -57,7 +58,7 @@ def installed() { initialize() }
 def updated() { initialize() }
 
 def initialize() {
-    unschedule()
+    unschedule("runCheck")   // not bare unschedule(): that would also cancel a pending restoreVolumes
     String cron = cronFor(settings.runTime as String, settings.runDays as List)
     if (cron) schedule(cron, "runCheck")
     if (settings.profileName) app.updateLabel(settings.profileName as String)
@@ -94,13 +95,15 @@ private Map classify(def d, String kind, List valid, String alertState, Integer 
     try {
         name = d.displayName
         state = d.currentValue(kind)?.toString()
-        lastActivity = d.getLastActivity()
     } catch (Exception e) {
         state = null
     }
+    try { lastActivity = d.getLastActivity() } catch (Exception e) { }
+    if (state == "unlocked with timeout") state = "unlocked"
     if (state == null || !(state in valid)) return [name: name, kind: kind, state: state ?: "unknown"]
     if (state == alertState) return [name: name, kind: kind, state: state]
-    if (staleHours && lastActivity != null && (nowMs - lastActivity.time) > staleHours * 3600000L) {
+    // a device that never reported activity counts as stale: it must not look secure
+    if (staleHours && (lastActivity == null || (nowMs - lastActivity.time) > staleHours * 3600000L)) {
         return [name: name, kind: kind, state: "stale"]
     }
     return null
@@ -127,7 +130,7 @@ void deliver(String message) {
     List tts = (settings.ttsDevices ?: []) as List
     List music = (settings.musicDevices ?: []) as List
     Integer volume = settings.speakerVolume as Integer
-    state.savedVolumes = [:]
+    if (state.savedVolumes == null) state.savedVolumes = [:]   // keep entries from a run whose restore is pending
 
     if (volume != null) {
         (tts + music).unique { it.id }.each { d -> safely("set volume on ${d}") { saveAndSetVolume(d, volume) } }
@@ -136,7 +139,8 @@ void deliver(String message) {
     tts.each { d -> safely("speak on ${d}") { d.speak(message) } }
     music.each { d -> safely("playText on ${d}") { d.playText(message) } }
 
-    if (state.savedVolumes) runIn((settings.restoreDelaySec ?: 15) as Integer, "restoreVolumes")
+    Integer delay = settings.restoreDelaySec != null ? settings.restoreDelaySec as Integer : 15
+    if (state.savedVolumes) runIn(delay, "restoreVolumes")
 }
 
 void restoreVolumes() {
@@ -151,7 +155,9 @@ void restoreVolumes() {
 private void saveAndSetVolume(def d, Integer volume) {
     String attr = ["level", "volume"].find { d.hasAttribute(it) }
     if (!attr) return
-    state.savedVolumes[d.id.toString()] = [attr: attr, value: d.currentValue(attr)]
+    String id = d.id.toString()
+    // first saved value wins: a repeat run must not record the announcement volume as the "previous" one
+    if (!state.savedVolumes.containsKey(id)) state.savedVolumes[id] = [attr: attr, value: d.currentValue(attr)]
     setVolumeAttr(d, attr, volume)
 }
 
@@ -173,15 +179,16 @@ void runCheck() {
                                    settings.contactAlert ?: "open", settings.lockAlert ?: "unlocked",
                                    settings.staleHours as Integer, nowMs)
     if (!offenders) {
-        logDebug "All devices OK, nothing to send"
+        logInfo "All devices OK, nothing to send"
         return
     }
     String timeText = new Date(nowMs).format("h:mm a", location.timeZone)
     String message = render(settings.messageTemplate as String, offenders, timeText)
-    logDebug "Sending: ${message}"
+    logInfo "Sending: ${message}"
     deliver(message)
 }
 
-private void logDebug(String msg) {
-    if (settings.logEnable) log.debug "Contact Notifier: ${msg}"
+/** Info logging is on unless explicitly turned off (unsaved setting = on). */
+private void logInfo(String msg) {
+    if (settings.logEnable != false) log.info "Contact Notifier: ${msg}"
 }

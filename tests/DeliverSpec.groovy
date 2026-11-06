@@ -29,6 +29,18 @@ assert h.named('runIn')[0][1][0] == 15
 h.call('restoreVolumes')
 assert m.calls.last() == ['setVolume', [11]]
 
+// two announcements inside the restore window keep the ORIGINAL volume
+t = dev('t', [level: 20])
+h = load([ttsDevices: [t], speakerVolume: 40])
+h.call('deliver', 'one'); h.call('deliver', 'two'); h.call('restoreVolumes')
+assert t.attrs.level == 20
+
+// restoreDelaySec 0 is respected, not replaced by the default
+t = dev('t', [level: 20])
+h = load([ttsDevices: [t], speakerVolume: 40, restoreDelaySec: 0])
+h.call('deliver', 'Hi')
+assert h.named('runIn')[0][1] == [0, 'restoreVolumes']
+
 // no volume attribute: still announces, nothing saved, no restore scheduled
 t = dev('t')
 h = load([ttsDevices: [t], speakerVolume: 40])
